@@ -1,0 +1,35 @@
+{
+  "name": "files-editor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "flask-dev": "python -m flask --app api/index run -p 5328 --debug",
+    "next-dev": "next dev",
+    "dev": "concurrently -k -n NEXT,API -c cyan,magenta \"npm:next-dev\" \"npm:flask-dev\"",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "pytest"
+  },
+  "dependencies": {
+    "@tiptap/extension-placeholder": "^3.33.1",
+    "@tiptap/extension-underline": "^3.33.1",
+    "@tiptap/pm": "^3.33.1",
+    "@tiptap/react": "^3.33.1",
+    "@tiptap/starter-kit": "^3.33.1",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^10.0.7",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5"
+  }
+}

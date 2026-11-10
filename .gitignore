@@ -1,36 +1,118 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
+# ==========================================
+# Next.js / React / Node
+# ==========================================
+node_modules/
+/.next/
+/out/
+/build/
+/dist/
 /.pnp
 .pnp.js
 
-# testing
-/coverage
+# Next.js build and type generation
+next-env.d.ts
+*.tsbuildinfo
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Node logs and debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# local env files
-.env*.local
+# Vercel
+.vercel/
+
+# ==========================================
+# Python / Flask
+# ==========================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+/develop-eggs/
+/downloads/
+/eggs/
+.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+/.venv/
+/venv/
+/ENV/
+/env/
+env.bak/
+venv.bak/
+
+# Flask instance folder & SQLite databases
+/instance/
+.webassets-cache
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+local.db*
+
+# Testing & Coverage (Pytest, Jest, Coverage.py)
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+/coverage/
+.tox/
+.nox/
+.hypothesis/
+
+# Python Linters & Type Checking
+.mypy_cache/
+.pytype/
+.ruff_cache/
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
 .env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
 
-# vercel
-.vercel
+# Do not ignore example environment files
+!.env.example
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ==========================================
+# Operating System & Editor Files
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
