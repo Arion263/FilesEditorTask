@@ -72,10 +72,11 @@ export default function DocumentPage() {
     if (user) void loadDoc(true);
   }, [user, loadDoc]);
 
+  const docId = doc?.id;
   const editable = doc ? doc.role === "owner" || doc.role === "editor" : false;
 
   const saveNow = useCallback(async () => {
-    if (!doc || !editable) return;
+    if (!docId || !editable) return;
     const snap = latestRef.current;
     if (snap.saving || !snap.dirty) return;
     const cleanTitle = snap.title.trim() || "Untitled document";
@@ -83,13 +84,13 @@ export default function DocumentPage() {
     setSaveState("saving");
     setBanner(null);
     try {
-      const { document: saved } = await api.updateDocument(doc.id, {
+      const { document: saved } = await api.updateDocument(docId, {
         title: cleanTitle,
         content: snap.content,
         base_version: snap.version,
       });
+      // Update the local version counter for next save
       snap.version = saved.version;
-      // Only clear dirty if the user didn't keep typing while the request was in flight.
       const stillMatches =
         (latestRef.current.title.trim() || "Untitled document") === cleanTitle &&
         latestRef.current.content === snap.content;
@@ -108,14 +109,14 @@ export default function DocumentPage() {
         setBanner(errorMessage(err, "Couldn't save changes."));
       }
     }
-  }, [doc, editable, handleSession]);
+  }, [docId, editable, handleSession]);
 
   // Autosave 900ms after the user stops typing.
   useEffect(() => {
     if (saveState !== "dirty") return;
     const timer = window.setTimeout(() => void saveNow(), 900);
     return () => window.clearTimeout(timer);
-  }, [saveState, saveNow, title]);
+  }, [saveState, saveNow]);
 
   // Ctrl/Cmd+S saves immediately; warn before closing tab with unsaved edits.
   useEffect(() => {
