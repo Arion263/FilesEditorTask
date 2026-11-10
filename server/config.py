@@ -12,6 +12,33 @@ import secrets
 import tempfile
 from dataclasses import dataclass, field
 
+
+def _load_local_dotenv() -> None:
+    """Load .env / .env.local in local development without overriding existing env vars."""
+    if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("VERCEL"):
+        return
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for filename in (".env.local", ".env"):
+        path = os.path.join(root, filename)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                for raw_line in f:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+        except OSError:
+            pass
+
+
+_load_local_dotenv()
+
 # Upload limits: 4 MB (Vercel serverless request body hard ceiling is 4.5 MB).
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024  # 4 MB
 # Vercel caps request bodies at 4.5 MB; keep JSON saves well below it.
@@ -68,6 +95,16 @@ class Config:
     )
     cron_secret: str = field(
         default_factory=lambda: os.environ.get("CRON_SECRET", "")
+    )
+    neon_realtime_url: str = field(
+        default_factory=lambda: (
+            os.environ.get("NEON_REALTIME_URL")
+            or os.environ.get("NEXT_PUBLIC_NEON_REALTIME_URL")
+            or ""
+        )
+    )
+    neon_realtime_secret: str = field(
+        default_factory=lambda: os.environ.get("NEON_REALTIME_SECRET", "")
     )
     testing: bool = False
 

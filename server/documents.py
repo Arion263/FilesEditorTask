@@ -18,10 +18,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from .config import MAX_CONTENT_CHARS, MAX_TITLE_CHARS
-from .db import document_shares, documents, folders, new_id, users, utcnow
+from .db import document_shares, documents, folders, new_id, notifications, users, utcnow
 from .errors import ApiError, bad_request, forbidden, not_found
 from .http import get_engine, json_body, login_required, optional_str, public_user
 from .importers import convert_upload
+from .notifications import current_txid
 from .sanitize import sanitize_html
 from .storage import delete_document_assets
 
@@ -313,6 +314,7 @@ def delete_document(doc_id: str):
         if role != "owner":
             raise forbidden("Only the owner can delete this document.")
         # Explicit share cleanup keeps behaviour identical on SQLite and Postgres.
+        conn.execute(delete(notifications).where(notifications.c.document_id == doc_id))
         conn.execute(delete(document_shares).where(document_shares.c.document_id == doc_id))
         conn.execute(delete(documents).where(documents.c.id == doc_id))
 
@@ -421,6 +423,7 @@ def share_document(doc_id: str):
                 document_shares.c.user_id == target.id,
             )
         ).first()
+        now = utcnow()
         try:
             if existing:
                 conn.execute(
@@ -434,13 +437,28 @@ def share_document(doc_id: str):
             else:
                 conn.execute(
                     insert(document_shares).values(
-                        document_id=doc_id, user_id=target.id, role=role, created_at=utcnow()
+                        document_id=doc_id, user_id=target.id, role=role, created_at=now
                     )
                 )
+            conn.execute(
+                insert(notifications).values(
+                    id=new_id(),
+                    recipient_id=target.id,
+                    actor_id=g.user.id,
+                    actor_name=g.user.name,
+                    actor_email=g.user.email,
+                    document_id=doc_id,
+                    document_title=doc.title,
+                    role=role,
+                    is_read=False,
+                    created_at=now,
+                )
+            )
         except IntegrityError:
             raise ApiError(409, "share_conflict", "Access was just changed. Please retry.")
+        txid = current_txid(conn)
         shares = list_shares(conn, doc_id)
-    return jsonify(shares=shares), (200 if existing else 201)
+    return jsonify(shares=shares, txid=txid), (200 if existing else 201)
 
 
 @bp.delete("/documents/<doc_id>/shares/<user_id>")

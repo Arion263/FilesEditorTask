@@ -54,6 +54,25 @@ export interface DemoAccount {
   password: string;
 }
 
+export interface AppNotification {
+  id: string;
+  recipient_id: string;
+  actor_id: string;
+  actor_name: string;
+  actor_email: string;
+  document_id: string;
+  document_title: string;
+  role: "viewer" | "editor";
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface RealtimeConfig {
+  enabled: boolean;
+  url: string | null;
+  token: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -152,12 +171,29 @@ export const api = {
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
 
   share: (id: string, email: string, role: "viewer" | "editor") =>
-    request<{ shares: Share[] }>(`/documents/${id}/shares`, {
+    request<{ shares: Share[]; txid?: string | null }>(`/documents/${id}/shares`, {
       method: "POST",
       body: json({ email, role }),
     }),
   revokeShare: (id: string, userId: string) =>
     request<{ shares: Share[] }>(`/documents/${id}/shares/${userId}`, { method: "DELETE" }),
+
+  listNotifications: () =>
+    request<{
+      notifications: AppNotification[];
+      unread_count: number;
+      realtime: RealtimeConfig;
+    }>("/notifications"),
+  markNotificationRead: (id: string) =>
+    request<{ ok: boolean; txid?: string | null }>(`/notifications/${id}/read`, {
+      method: "POST",
+    }),
+  markAllNotificationsRead: () =>
+    request<{ ok: boolean; updated: number; txid?: string | null }>("/notifications/read-all", {
+      method: "POST",
+    }),
+  deleteNotification: (id: string) =>
+    request<void>(`/notifications/${id}`, { method: "DELETE" }),
 
   importDocument: (file: File) =>
     request<{ document: DocumentDetail }>("/documents/import", {

@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify
 
-from . import auth, cron, documents
+from . import auth, cron, documents, notifications
 from .config import Config
 from .db import init_db, make_engine
 from .errors import register_error_handlers
@@ -36,6 +36,7 @@ def create_app(config: Config | None = None) -> Flask:
     register_error_handlers(app)
     app.register_blueprint(auth.bp)
     app.register_blueprint(documents.bp)
+    app.register_blueprint(notifications.bp)
     app.register_blueprint(cron.bp)
 
     @app.get("/api/health")

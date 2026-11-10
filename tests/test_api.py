@@ -165,6 +165,52 @@ def test_delete_document_removes_shares(alice, bob):
     assert bob.get("/api/documents").get_json()["shared"] == []
 
 
+def test_sharing_creates_recipient_notification_and_supports_read_and_delete(alice, bob, carol):
+    doc = create_doc(alice, title="Roadmap 2027", content="<p>confidential</p>")
+
+    # Initially Bob has no notifications
+    initial = bob.get("/api/notifications").get_json()
+    assert initial["notifications"] == []
+    assert initial["unread_count"] == 0
+    assert "token" in initial["realtime"]
+
+    # Alice shares the document with Bob as editor
+    assert share(alice, doc["id"], "bob@example.com", "editor").status_code == 201
+
+    # Bob receives the notification; Carol does not
+    bob_notifs = bob.get("/api/notifications").get_json()
+    assert bob_notifs["unread_count"] == 1
+    assert len(bob_notifs["notifications"]) == 1
+    notif = bob_notifs["notifications"][0]
+    assert notif["document_id"] == doc["id"]
+    assert notif["document_title"] == "Roadmap 2027"
+    assert notif["actor_email"] == "alice@example.com"
+    assert notif["role"] == "editor"
+    assert notif["is_read"] is False
+
+    assert carol.get("/api/notifications").get_json()["notifications"] == []
+
+    # Carol cannot mark Bob's notification as read
+    assert carol.post(f"/api/notifications/{notif['id']}/read").status_code == 404
+
+    # Bob marks the notification as read
+    assert bob.post(f"/api/notifications/{notif['id']}/read").status_code == 200
+    after_read = bob.get("/api/notifications").get_json()
+    assert after_read["unread_count"] == 0
+    assert after_read["notifications"][0]["is_read"] is True
+
+    # Updating permission creates a new unread notification; read-all clears it
+    assert share(alice, doc["id"], "bob@example.com", "viewer").status_code == 200
+    assert bob.get("/api/notifications").get_json()["unread_count"] == 1
+    assert bob.post("/api/notifications/read-all").status_code == 200
+    assert bob.get("/api/notifications").get_json()["unread_count"] == 0
+
+    # Bob can dismiss/delete a notification
+    assert bob.delete(f"/api/notifications/{notif['id']}").status_code == 204
+    remaining = bob.get("/api/notifications").get_json()["notifications"]
+    assert len(remaining) == 1
+
+
 # --------------------------------------------------------------------------- #
 # file upload / import
 # --------------------------------------------------------------------------- #

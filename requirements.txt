@@ -5,3 +5,4 @@ mammoth==1.13.0
 Markdown==3.11.3
 nh3==0.3.7
 boto3==1.43.127
+python-dotenv==1.2.4

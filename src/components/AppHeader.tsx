@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "./AuthProvider";
+import { NotificationCenter } from "./NotificationCenter";
 
 export function AppHeader({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -21,6 +22,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
         {user && (
           <div className="flex items-center gap-3 text-sm">
+            <NotificationCenter />
             <span className="hidden text-slate-600 md:inline" title={user.email}>
               {user.name}
             </span>

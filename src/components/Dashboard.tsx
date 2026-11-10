@@ -48,6 +48,15 @@ export function Dashboard() {
     if (user) void load();
   }, [user, load]);
 
+  useEffect(() => {
+    if (!user) return;
+    const onShared = () => {
+      void load();
+    };
+    window.addEventListener("fe:document-shared", onShared);
+    return () => window.removeEventListener("fe:document-shared", onShared);
+  }, [user, load]);
+
   async function createFolderSubmit(e: React.FormEvent) {
     e.preventDefault();
     const name = newFolderName.trim();

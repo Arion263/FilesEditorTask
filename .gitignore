@@ -116,3 +116,5 @@ ehthumbs.db
 !.vscode/extensions.json
 *.sublime-workspace
 *.sublime-project
+
+skills-lock.json

@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -117,6 +118,38 @@ document_shares = Table(
     CheckConstraint("role IN ('viewer', 'editor')", name="ck_document_shares_role"),
     # PK covers (document_id, ...) lookups; this covers "shared with me".
     Index("ix_document_shares_user_id", "user_id"),
+)
+
+notifications = Table(
+    "notifications",
+    metadata,
+    Column("id", String(32), primary_key=True, default=new_id),
+    Column(
+        "recipient_id",
+        String(32),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "actor_id",
+        String(32),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("actor_name", String(100), nullable=False),
+    Column("actor_email", String(254), nullable=False),
+    Column(
+        "document_id",
+        String(32),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("document_title", String(200), nullable=False),
+    Column("role", String(10), nullable=False),
+    Column("is_read", Boolean, nullable=False, default=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, default=utcnow),
+    CheckConstraint("role IN ('viewer', 'editor')", name="ck_notifications_role"),
+    Index("ix_notifications_recipient_id", "recipient_id"),
 )
 
 DEMO_PASSWORD = "password123"
