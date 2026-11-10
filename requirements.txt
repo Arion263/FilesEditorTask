@@ -4,4 +4,4 @@ psycopg[binary]==3.3.8
 mammoth==1.13.0
 Markdown==3.11.3
 nh3==0.3.7
-cloudinary==1.47.0
+boto3==1.43.127

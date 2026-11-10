@@ -55,6 +55,21 @@ users = Table(
     UniqueConstraint("email", name="uq_users_email"),
 )
 
+folders = Table(
+    "folders",
+    metadata,
+    Column("id", String(32), primary_key=True, default=new_id),
+    Column(
+        "owner_id",
+        String(32),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("name", String(100), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, default=utcnow),
+    Index("ix_folders_owner_id", "owner_id"),
+)
+
 documents = Table(
     "documents",
     metadata,
@@ -65,6 +80,12 @@ documents = Table(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     ),
+    Column(
+        "folder_id",
+        String(32),
+        ForeignKey("folders.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
     Column("title", String(200), nullable=False),
     # Sanitised HTML produced by the TipTap editor (or the import converters).
     Column("content", Text, nullable=False, default=""),
@@ -73,6 +94,7 @@ documents = Table(
     Column("created_at", DateTime(timezone=True), nullable=False, default=utcnow),
     Column("updated_at", DateTime(timezone=True), nullable=False, default=utcnow),
     Index("ix_documents_owner_id", "owner_id"),
+    Index("ix_documents_folder_id", "folder_id"),
 )
 
 document_shares = Table(

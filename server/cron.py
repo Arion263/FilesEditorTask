@@ -11,7 +11,6 @@ from sqlalchemy import select
 from .db import documents
 from .errors import forbidden
 from .http import get_engine
-from .storage import configure_cloudinary, is_cloudinary_configured
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ bp = Blueprint("cron", __name__, url_prefix="/api/cron")
 @bp.route("/cleanup-storage", methods=["GET", "POST"])
 def cleanup_storage():
     """Daily garbage collection.
-    Finds folders or tags in Cloudinary under `files_editor/docs/<doc_id>`
+    Finds folders or tags in Neon Storage under `files-bucket-1/<user-id>/<doc_id>`
     and deletes any whose document_id does not exist in the database.
     """
     cron_secret = current_app.extensions["fe_config"].cron_secret
@@ -32,11 +31,6 @@ def cleanup_storage():
     if expected and auth_header != expected:
         raise forbidden("Unauthorized cron request.")
 
-    if not is_cloudinary_configured():
-        return jsonify(ok=True, message="Cloudinary not configured, nothing to clean.")
-
-    configure_cloudinary()
-    import cloudinary.api
 
     # Fetch all active document IDs from the database
     with get_engine().connect() as conn:
@@ -47,8 +41,7 @@ def cleanup_storage():
 
     try:
         # List subfolders inside files_editor/docs
-        res = cloudinary.api.subfolders("files_editor/docs")
-        folders = [f["name"] for f in res.get("folders", [])]
+        res = neon_bucket.api.subfolders(f"files-bucket-1/")
 
         for doc_id in folders:
             if doc_id not in active_ids:

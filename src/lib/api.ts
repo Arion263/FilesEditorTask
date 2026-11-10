@@ -17,11 +17,19 @@ export interface Share {
   created_at: string;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+
 export interface DocumentSummary {
   id: string;
   title: string;
   updated_at: string;
   role: Role;
+  folder_id?: string | null;
+  folder_name?: string | null;
   share_count?: number;
   owner?: User;
 }
@@ -31,6 +39,8 @@ export interface DocumentDetail {
   title: string;
   content: string;
   version: number;
+  folder_id?: string | null;
+  folder_name?: string | null;
   created_at: string;
   updated_at: string;
   role: Role;
@@ -118,16 +128,22 @@ export const api = {
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
 
   listDocuments: () =>
-    request<{ owned: DocumentSummary[]; shared: DocumentSummary[] }>("/documents"),
-  createDocument: (title?: string) =>
+    request<{ folders: Folder[]; owned: DocumentSummary[]; shared: DocumentSummary[] }>("/documents"),
+  createDocument: (title?: string, folder_id?: string) =>
     request<{ document: DocumentDetail }>("/documents", {
       method: "POST",
-      body: json(title ? { title } : {}),
+      body: json({ ...(title ? { title } : {}), ...(folder_id ? { folder_id } : {}) }),
     }),
+  createFolder: (name: string) =>
+    request<{ folder: Folder }>("/folders", {
+      method: "POST",
+      body: json({ name }),
+    }),
+  deleteFolder: (id: string) => request<void>(`/folders/${id}`, { method: "DELETE" }),
   getDocument: (id: string) => request<{ document: DocumentDetail }>(`/documents/${id}`),
   updateDocument: (
     id: string,
-    changes: { title?: string; content?: string; base_version: number },
+    changes: { title?: string; content?: string; folder_id?: string | null; base_version: number },
   ) =>
     request<{ document: DocumentDetail }>(`/documents/${id}`, {
       method: "PATCH",

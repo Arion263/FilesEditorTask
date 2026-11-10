@@ -9,6 +9,7 @@ import { useRequireAuth, useSessionGuard } from "@/components/AuthProvider";
 import {
   api,
   type DocumentSummary,
+  type Folder,
   UPLOAD_ACCEPT,
   UPLOAD_HELP,
   validateUpload,
@@ -23,6 +24,10 @@ export function Dashboard() {
 
   const [owned, setOwned] = useState<DocumentSummary[] | null>(null);
   const [shared, setShared] = useState<DocumentSummary[] | null>(null);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [activeFolder, setActiveFolder] = useState<string | "all">("all");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showFolderInput, setShowFolderInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<null | "create" | "upload">(null);
   const [dragging, setDragging] = useState(false);
@@ -32,6 +37,7 @@ export function Dashboard() {
       const data = await api.listDocuments();
       setOwned(data.owned);
       setShared(data.shared);
+      setFolders(data.folders || []);
       setError(null);
     } catch (err) {
       if (!handleSession(err)) setError(errorMessage(err, "Couldn't load your documents."));
@@ -42,11 +48,39 @@ export function Dashboard() {
     if (user) void load();
   }, [user, load]);
 
+  async function createFolderSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newFolderName.trim();
+    if (!name) return;
+    try {
+      const { folder } = await api.createFolder(name);
+      setFolders((prev) => [...prev, folder]);
+      setNewFolderName("");
+      setShowFolderInput(false);
+      setActiveFolder(folder.id);
+    } catch (err) {
+      if (!handleSession(err)) setError(errorMessage(err));
+    }
+  }
+
+  async function deleteFolderAction(folderId: string, folderName: string) {
+    if (!window.confirm(`Delete folder "${folderName}"? Documents inside will not be deleted.`)) return;
+    try {
+      await api.deleteFolder(folderId);
+      setFolders((prev) => prev.filter((f) => f.id !== folderId));
+      if (activeFolder === folderId) setActiveFolder("all");
+      void load();
+    } catch (err) {
+      if (!handleSession(err)) setError(errorMessage(err));
+    }
+  }
+
   async function createDoc() {
     setBusy("create");
     setError(null);
     try {
-      const { document } = await api.createDocument();
+      const folderId = activeFolder !== "all" ? activeFolder : undefined;
+      const { document } = await api.createDocument(undefined, folderId);
       router.push(`/documents/${document.id}`);
     } catch (err) {
       if (!handleSession(err)) setError(errorMessage(err));
@@ -165,14 +199,103 @@ export function Dashboard() {
           </p>
         )}
 
+        {/* Folders navigation bar */}
+        <div className="mt-8 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 mr-1">
+            Folders:
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveFolder("all")}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              activeFolder === "all"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            All Documents
+          </button>
+          {folders.map((f) => (
+            <div key={f.id} className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setActiveFolder(f.id)}
+                className={`rounded-l-lg px-3 py-1.5 text-xs font-medium transition ${
+                  activeFolder === f.id
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "bg-white text-slate-600 hover:bg-slate-100 border border-r-0 border-slate-200"
+                }`}
+              >
+                📁 {f.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteFolderAction(f.id, f.name)}
+                title={`Delete folder ${f.name}`}
+                className={`rounded-r-lg px-2 py-1.5 text-xs transition border ${
+                  activeFolder === f.id
+                    ? "bg-blue-700 text-blue-200 border-blue-700 hover:text-white"
+                    : "bg-white text-slate-400 border-slate-200 hover:text-red-600 hover:bg-red-50"
+                }`}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {showFolderInput ? (
+            <form onSubmit={createFolderSubmit} className="flex items-center gap-1.5">
+              <input
+                type="text"
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                autoFocus
+                className="input py-1 px-2 text-xs w-36 h-8"
+              />
+              <button type="submit" className="btn-primary py-1 px-2.5 text-xs h-8">
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowFolderInput(false)}
+                className="btn-ghost py-1 px-2 text-xs h-8"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowFolderInput(true)}
+              className="rounded-lg border border-dashed border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-500 hover:border-slate-400 hover:text-slate-700"
+            >
+              + New folder
+            </button>
+          )}
+        </div>
+
         <Section
-          title="My documents"
+          title={activeFolder === "all" ? "My documents" : `Folder: ${folders.find((f) => f.id === activeFolder)?.name || ""}`}
           subtitle="Documents you own"
-          docs={owned}
-          empty="You don't own any documents yet. Create one or upload a file."
+          docs={
+            owned === null
+              ? null
+              : activeFolder === "all"
+                ? owned
+                : owned.filter((d) => d.folder_id === activeFolder)
+          }
+          empty={
+            activeFolder === "all"
+              ? "You don't own any documents yet. Create one or upload a file."
+              : "No documents in this folder yet. Create one above!"
+          }
           render={(doc) => (
             <DocCard key={doc.id} doc={doc} onRemove={() => deleteDoc(doc)} removeLabel="Delete">
               <span className="badge bg-blue-50 text-blue-700">Owner</span>
+              {doc.folder_name && (
+                <span className="badge bg-indigo-50 text-indigo-700">📁 {doc.folder_name}</span>
+              )}
               {doc.share_count ? (
                 <span className="badge bg-slate-100 text-slate-600">
                   Shared with {doc.share_count}

@@ -51,8 +51,20 @@ class Config:
     seed_demo_users: bool = field(
         default_factory=lambda: os.environ.get("SEED_DEMO_USERS", "1") != "0"
     )
-    cloudinary_url: str = field(
-        default_factory=lambda: os.environ.get("CLOUDINARY_URL", "")
+    s3_endpoint_url: str = field(
+        default_factory=lambda: os.environ.get("AWS_ENDPOINT_URL_S3", "")
+    )
+    s3_access_key_id: str = field(
+        default_factory=lambda: os.environ.get("AWS_ACCESS_KEY_ID", "")
+    )
+    s3_secret_access_key: str = field(
+        default_factory=lambda: os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    )
+    s3_region: str = field(
+        default_factory=lambda: os.environ.get("AWS_REGION", "auto")
+    )
+    s3_bucket_name: str = field(
+        default_factory=lambda: os.environ.get("AWS_S3_BUCKET_NAME", "files-editor")
     )
     cron_secret: str = field(
         default_factory=lambda: os.environ.get("CRON_SECRET", "")

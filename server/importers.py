@@ -22,7 +22,7 @@ import markdown as md
 from .config import MAX_UPLOAD_BYTES, SUPPORTED_UPLOAD_EXTENSIONS
 from .errors import bad_request
 from .sanitize import sanitize_html
-from .storage import is_cloudinary_configured, upload_image_buffer
+from .storage import is_s3_configured, upload_image_buffer
 
 
 @dataclass
@@ -68,12 +68,12 @@ def _docx_to_html(raw: bytes, doc_id: str | None = None) -> str:
             encoded_bytes = image_bytes.read()
             content_type = image.content_type or "image/png"
 
-            # If Cloudinary is configured and doc_id provided, upload it!
-            if doc_id and is_cloudinary_configured():
-                img_name = f"img_{uuid.uuid4().hex[:8]}"
-                res = upload_image_buffer(encoded_bytes, content_type, doc_id, img_name)
-                if res and "secure_url" in res:
-                    return {"src": res["secure_url"]}
+            # If S3 / Neon bucket is configured and doc_id provided, upload it!
+            if doc_id and is_s3_configured():
+                img_name = f"img_{uuid.uuid4().hex[:8]}.png"
+                img_url = upload_image_buffer(encoded_bytes, content_type, doc_id, img_name)
+                if img_url:
+                    return {"src": img_url}
 
             # Fallback: Base64 data URI so images never disappear
             b64 = base64.b64encode(encoded_bytes).decode("ascii")

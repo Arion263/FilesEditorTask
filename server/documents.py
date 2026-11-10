@@ -18,7 +18,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
 from .config import MAX_CONTENT_CHARS, MAX_TITLE_CHARS
-from .db import document_shares, documents, new_id, users, utcnow
+from .db import document_shares, documents, folders, new_id, users, utcnow
 from .errors import ApiError, bad_request, forbidden, not_found
 from .http import get_engine, json_body, login_required, optional_str, public_user
 from .importers import convert_upload
@@ -107,11 +107,18 @@ def list_shares(conn: Connection, doc_id: str) -> list[dict[str, Any]]:
 
 def serialize_document(conn: Connection, row, role: str) -> dict[str, Any]:
     owner = conn.execute(select(users).where(users.c.id == row.owner_id)).first()
+    folder_name = None
+    if getattr(row, "folder_id", None):
+        f = conn.execute(select(folders.c.name).where(folders.c.id == row.folder_id)).first()
+        if f:
+            folder_name = f[0]
     payload = {
         "id": row.id,
         "title": row.title,
         "content": row.content,
         "version": row.version,
+        "folder_id": getattr(row, "folder_id", None),
+        "folder_name": folder_name,
         "created_at": iso(row.created_at),
         "updated_at": iso(row.updated_at),
         "role": role,
@@ -122,7 +129,12 @@ def serialize_document(conn: Connection, row, role: str) -> dict[str, Any]:
     return payload
 
 
-def create_document(title: str, content: str, doc_id: str | None = None) -> dict[str, Any]:
+def create_document(
+    title: str,
+    content: str,
+    doc_id: str | None = None,
+    folder_id: str | None = None,
+) -> dict[str, Any]:
     now = utcnow()
     doc_id = doc_id or new_id()
     with get_engine().begin() as conn:
@@ -130,6 +142,7 @@ def create_document(title: str, content: str, doc_id: str | None = None) -> dict
             insert(documents).values(
                 id=doc_id,
                 owner_id=g.user.id,
+                folder_id=folder_id,
                 title=title,
                 content=content,
                 version=1,
@@ -156,8 +169,20 @@ def uploaded_file():
 def list_documents():
     me = g.user.id
     with get_engine().connect() as conn:
+        user_folders = conn.execute(
+            select(folders.c.id, folders.c.name, folders.c.created_at)
+            .where(folders.c.owner_id == me)
+            .order_by(folders.c.name)
+        ).all()
         owned = conn.execute(
-            select(documents.c.id, documents.c.title, documents.c.updated_at)
+            select(
+                documents.c.id,
+                documents.c.title,
+                documents.c.folder_id,
+                documents.c.updated_at,
+                folders.c.name.label("folder_name"),
+            )
+            .outerjoin(folders, folders.c.id == documents.c.folder_id)
             .where(documents.c.owner_id == me)
             .order_by(documents.c.updated_at.desc())
         ).all()
@@ -165,14 +190,17 @@ def list_documents():
             select(
                 documents.c.id,
                 documents.c.title,
+                documents.c.folder_id,
                 documents.c.updated_at,
                 document_shares.c.role,
                 users.c.id.label("owner_id"),
                 users.c.name.label("owner_name"),
                 users.c.email.label("owner_email"),
+                folders.c.name.label("folder_name"),
             )
             .join(document_shares, document_shares.c.document_id == documents.c.id)
             .join(users, users.c.id == documents.c.owner_id)
+            .outerjoin(folders, folders.c.id == documents.c.folder_id)
             .where(document_shares.c.user_id == me)
             .order_by(documents.c.updated_at.desc())
         ).all()
@@ -186,10 +214,13 @@ def list_documents():
                 share_counts[doc_id] = share_counts.get(doc_id, 0) + 1
 
     return jsonify(
+        folders=[{"id": f.id, "name": f.name} for f in user_folders],
         owned=[
             {
                 "id": d.id,
                 "title": d.title,
+                "folder_id": d.folder_id,
+                "folder_name": d.folder_name,
                 "updated_at": iso(d.updated_at),
                 "role": "owner",
                 "share_count": share_counts.get(d.id, 0),
@@ -200,6 +231,8 @@ def list_documents():
             {
                 "id": d.id,
                 "title": d.title,
+                "folder_id": d.folder_id,
+                "folder_name": d.folder_name,
                 "updated_at": iso(d.updated_at),
                 "role": d.role,
                 "owner": {"id": d.owner_id, "name": d.owner_name, "email": d.owner_email},
@@ -217,7 +250,8 @@ def create():
         raise bad_request("Expected a JSON object in the request body.")
     title = clean_title(data.get("title"), allow_default=True)
     content = clean_content(data.get("content", ""))
-    return jsonify(document=create_document(title, content)), 201
+    folder_id = data.get("folder_id")
+    return jsonify(document=create_document(title, content, folder_id=folder_id)), 201
 
 
 @bp.get("/documents/<doc_id>")
@@ -247,8 +281,10 @@ def update_document(doc_id: str):
         changes["title"] = clean_title(data["title"], allow_default=False)
     if "content" in data:
         changes["content"] = clean_content(data["content"])
+    if "folder_id" in data:
+        changes["folder_id"] = data["folder_id"] or None
     if not changes:
-        raise bad_request("Nothing to update: send 'title' and/or 'content'.")
+        raise bad_request("Nothing to update: send 'title', 'content', or 'folder_id'.")
 
     with get_engine().begin() as conn:
         row, role = load_with_role(conn, doc_id, g.user.id)
@@ -282,6 +318,61 @@ def delete_document(doc_id: str):
 
     # Delete external storage assets asynchronously/idempotently with retries
     delete_document_assets(doc_id)
+    return "", 204
+
+
+# --------------------------------------------------------------------------- #
+# folders
+# --------------------------------------------------------------------------- #
+@bp.get("/folders")
+@login_required
+def list_folders():
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            select(folders.c.id, folders.c.name, folders.c.created_at)
+            .where(folders.c.owner_id == g.user.id)
+            .order_by(folders.c.name)
+        ).all()
+        return jsonify(
+            folders=[{"id": r.id, "name": r.name, "created_at": iso(r.created_at)} for r in rows]
+        )
+
+
+@bp.post("/folders")
+@login_required
+def create_folder():
+    data = json_body()
+    name = (data.get("name") or "").strip()
+    if not name or len(name) > 100:
+        raise bad_request("Folder name must be between 1 and 100 characters.")
+    folder_id = new_id()
+    now = utcnow()
+    with get_engine().begin() as conn:
+        conn.execute(
+            insert(folders).values(
+                id=folder_id,
+                owner_id=g.user.id,
+                name=name,
+                created_at=now,
+            )
+        )
+    return jsonify(folder={"id": folder_id, "name": name, "created_at": iso(now)}), 201
+
+
+@bp.delete("/folders/<folder_id>")
+@login_required
+def delete_folder(folder_id: str):
+    with get_engine().begin() as conn:
+        f = conn.execute(
+            select(folders).where(folders.c.id == folder_id, folders.c.owner_id == g.user.id)
+        ).first()
+        if not f:
+            raise not_found("Folder not found.")
+        # Nullify folder_id on documents in this folder (documents are not deleted)
+        conn.execute(
+            update(documents).where(documents.c.folder_id == folder_id).values(folder_id=None)
+        )
+        conn.execute(delete(folders).where(folders.c.id == folder_id))
     return "", 204
 
 
