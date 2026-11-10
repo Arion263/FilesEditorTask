@@ -1,49 +1,49 @@
-# Constraints y Limitaciones de la Implementación Actual
+# Technical Constraints & Architectural Boundaries
 
-Este documento detalla las restricciones arquitectónicas y técnicas asociadas a la plataforma de despliegue seleccionada (Vercel Serverless Functions) y al procesamiento de archivos en el navegador.
-
----
-
-## 1. Límite de Tamaño de Archivo (Upload Payload Ceiling: 4 MB)
-
-### El Problema
-- **Restricción de infraestructura en Vercel:** Las funciones serverless de Vercel (tanto en tiers gratuitos como de pago estándar) aplican un límite estricto de **4.5 MB** en el cuerpo de las solicitudes HTTP entrantes (`request body payload`).
-- Si un cliente intenta enviar una petición `multipart/form-data` con un archivo superior a este límite directamente hacia la ruta de la API (`/api/documents/import` o `/api/convert`), el proxy de borde de Vercel aborta la conexión inmediatamente y devuelve un error **`413 FUNCTION_PAYLOAD_TOO_LARGE`**, sin permitir que la función de Python se ejecute ni emita un mensaje de error controlado.
-- **Configuración adoptada:** Para mantenerse dentro de los márgenes seguros de transporte HTTP y metadata de la solicitud, el límite de subida directa se estableció en **4 MB**.
-
-### Impacto en el Producto
-- Archivos `.docx` de gran tamaño que contengan imágenes de alta resolución incrustadas o manuales extensos podrían superar los 4 MB y ser rechazados por el validador cliente/servidor.
+This document details the architectural boundaries and operational constraints associated with our target deployment platform (Vercel Serverless Functions), storage providers, and browser-based rich-text rendering.
 
 ---
 
-## 2. Persistencia en Funciones Serverless (Filesystem Efímero)
+## 1. File Upload Payload Ceiling (Direct Upload Limit: 4 MB)
 
-### El Problema
-- En entornos serverless, el sistema de archivos raíz es de **solo lectura** (con excepción del directorio temporal `/tmp`).
-- El directorio `/tmp` se destruye y reinicia periódicamente en cada "cold restart" o nuevo despliegue, además de estar completamente aislado entre distintas instancias concurrentes de la función.
-- Por esta razón, una base de datos local SQLite en el filesystem de la función no garantiza durabilidad en producción, requiriendo un backend PostgreSQL administrado externo (como Neon o Supabase).
+### The Constraint
+- **Vercel Serverless Request Body Limit:** Vercel enforces a strict **4.5 MB** limit on HTTP request bodies arriving at serverless functions across standard plans.
+- If an HTTP client attempts to post a multipart form payload exceeding this limit directly to `/api/documents/import` or `/api/convert`, Vercel's edge proxy terminates the connection and immediately responds with HTTP **`413 FUNCTION_PAYLOAD_TOO_LARGE`**, preventing the Flask backend from executing or returning a structured JSON error.
+- **Adopted Configuration:** To guarantee safe transport margins and accommodate multipart boundary overhead, the application sets a strict direct upload cap of **4 MB** (`server/config.py`, `src/lib/api.ts`).
 
----
-
-## 3. Renderizado y Rendimiento en el Editor (DOM / TipTap)
-
-### El Problema
-- La aplicación convierte el contenido de los documentos en HTML para ser editado en TipTap (ProseMirror).
-- Un archivo de texto plano o Markdown de 4 MB equivale aproximadamente a entre **700,000 y 800,000 palabras** (más de 1,500 páginas de texto plano).
-- Renderizar e interactuar en tiempo real con árboles de nodos DOM de semejante magnitud dentro de un navegador puede provocar degradación en la tasa de refresco (framerate) o bloqueos temporales en la pestaña del navegador.
+### Product Impact
+- Very large `.docx` files containing high-resolution embedded images or massive formatting structures exceeding 4 MB will be rejected by pre-flight validation on both client and server before reaching the proxy limit.
 
 ---
 
-## Solución Futura y Escalabilidad
+## 2. Serverless Ephemeral Filesystem & Persistence
 
-Para superar estas limitaciones en etapas posteriores, las soluciones arquitectónicas recomendadas son:
+### The Constraint
+- In serverless runtime instances, the root filesystem is **read-only**, with the exception of the `/tmp` scratch directory.
+- The `/tmp` directory is ephemeral: it is recycled across cold boots, isolated across parallel container instances, and discarded upon each new code deployment.
+- A local SQLite database in `/tmp` cannot provide durable multi-user persistence in serverless production environments. Durable storage requires an external hosted database (PostgreSQL via Neon / Supabase).
 
-1. **Subida Directa a Almacenamiento de Objetos (Pre-signed Upload / Direct to Bucket):**
-   - El cliente solicita a la API una URL pre-firmada (`pre-signed URL`) de corta duración.
-   - El navegador sube el archivo directamente a un bucket de almacenamiento externo (como **Cloudflare R2**, **AWS S3** o **Vercel Blob**), saltándose por completo el proxy serverless de Vercel.
-   - Una vez cargado el archivo, la API o un worker en background descarga y procesa el archivo desde el bucket sin estar atado a la restricción de 4.5 MB de payload HTTP.
+---
 
-2. **Migración a Infraestructura Dedicada o de Pago:**
-   - Desplegar el backend Python en un contenedor o servicio de ejecución persistente (como **Railway**, **Render**, **Fly.io** o **Google Cloud Run**), donde los límites de payload del servidor web (Gunicorn / Nginx / Uvicorn) pueden configurarse libremente en 20 MB, 50 MB o más.
+## 3. In-Browser DOM Rendering Limits (TipTap / ProseMirror)
 
-> **Nota:** Estas soluciones no son estrictamente necesarias para el alcance actual del proyecto, ya que la subida directa de 4 MB cubre ampliamente los requisitos funcionales evaluados para documentos de texto y formato rico (`.txt`, `.md`, `.docx`).
+### The Constraint
+- The application transforms document bodies into sanitized HTML for live editing inside TipTap.
+- A 4 MB raw text or Markdown file corresponds to approximately **700,000 to 800,000 words** (over 1,500 pages of continuous text).
+- Rendering and calculating layout for massive DOM node trees in real time within the browser engine will cause significant frame rate drops and interface unresponsiveness.
+
+---
+
+## 4. Scalability Solutions & Future Roadmap
+
+To scale beyond these initial boundaries in subsequent releases, the following architectural paths are established:
+
+1. **Direct-to-Bucket Pre-Signed Uploads:**
+   - The web client requests a short-lived pre-signed upload URL from `/api/storage/presign`.
+   - The client uploads the raw binary file directly to an object storage bucket (Neon S3, Cloudflare R2, or AWS S3), completely bypassing Vercel's 4.5 MB serverless proxy.
+   - An asynchronous backend worker or serverless handler then processes and streams the file from storage.
+
+2. **Dedicated Containerized Infrastructure:**
+   - Deploying the Python WSGI/ASGI service on a dedicated container platform (e.g., Railway, Render, Fly.io, or Google Cloud Run) where reverse-proxy request limits (Nginx, Gunicorn, Uvicorn) can be customized to 20 MB, 50 MB, or higher.
+
+> **Note:** These solutions are not strictly necessary for the current product scope, as the 4 MB direct threshold reliably accommodates standard document editing workflows (`.txt`, `.md`, `.docx`).
