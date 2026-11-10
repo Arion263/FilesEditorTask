@@ -102,13 +102,14 @@ The application implements end-to-end reactivity using **Neon Realtime** (Live S
 ```
 
 ### Key Realtime Capabilities:
-1. **Persistent WebSocket Pipeline:** The browser establishes a direct WebSocket connection (`wss://...neon.tech/`) to Neon's Live SQL gateway using `createRealtimeClient`. The connection remains open continuously across route navigations, eliminating repeated HTTP polling.
+1. **Persistent WebSocket Pipeline:** The browser establishes a direct WebSocket connection (`wss://...neon.tech/`) to Neon's Live SQL gateway using a singleton client factory (`getRealtimeClient` in `src/lib/realtime-client.ts`). The connection remains open continuously across route navigations, React StrictMode mount/unmount cycles, and component re-renders, preventing premature socket disposal and eliminating repeated HTTP polling.
 2. **Sealed Live Queries:** Query definitions remain strictly server-side. Next.js creates a deterministic, parameterized SQL query (`WHERE recipient_id = $1`) and encrypts it with `NEON_REALTIME_SECRET` into a short-lived bearer capability (60-second lifetime). The client subscribes with the capability without exposing raw SQL or credentials.
 3. **Automated Capability Renewal:** The React runtime (`useLiveQuery` + `refreshQuery`) automatically requests a renewed sealed capability 10 seconds before expiration, ensuring seamless streaming without socket dropouts.
 4. **Realtime UI & Diagnostics:**
+   - **Fault-Tolerant Boundary:** `RealtimeErrorBoundary` catches and exposes subscription issues gracefully to the status pill without interrupting page execution.
    - **Status Badge:** Displays live socket connectivity (`live` 🟢, `connecting` 🟡, `error` 🔴).
    - **Debug Inspector:** An embedded diagnostics panel details WebSocket URL, query fingerprint, last received transaction timestamp, and provides a manual *Reconnect* trigger.
-   - **Toast Notifications:** Incoming share events trigger top-right floating toasts (`top-16 right-3 sm:right-6`) with smooth animations, action buttons (*Open document* / *Dismiss*), and an 8-second auto-dismiss timeout.
+   - **Toast Notifications:** Incoming share events trigger top-right floating toasts (`top-16 right-3 sm:right-6`) with smooth animations, action buttons (*Open document* / *Dismiss*), and a 7-second auto-dismiss timeout.
    - **Cross-Component Synchronization:** Incoming WebSocket notifications dispatch synthetic events (`fe:document-shared`) that silently refresh the dashboard's **"Shared with me"** section in real time.
 
 ---

@@ -1,17 +1,16 @@
 "use client";
 
 import {
-  createRealtimeClient,
   type LiveQueryState,
-  type RealtimeClient,
   type SealedLiveQuery,
 } from "@neon/realtime/client";
 import { RealtimeProvider, useLiveQuery } from "@neon/realtime-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type AppNotification } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { getRealtimeClient } from "@/lib/realtime-client";
 import type { RealtimeNotificationRow } from "@/lib/realtime-server";
 import { useAuth } from "./AuthProvider";
 
@@ -71,70 +70,66 @@ function LiveNotificationSubscriber({
   return null;
 }
 
+class RealtimeErrorBoundary extends Component<
+  { onError: (error: Error) => void; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { onError: (error: Error) => void; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[Neon Realtime WebSocket ErrorBoundary]:", error);
+    this.props.onError(error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return null;
+    }
+    return this.props.children;
+  }
+}
+
 function RealtimeSubscriberRoot({
   realtimeUrl,
   sealedQuery,
   refreshQuery,
   onRows,
   onState,
-  onClientReady,
 }: {
   realtimeUrl: string;
   sealedQuery: SealedLiveQuery<RealtimeNotificationRow>;
   refreshQuery: () => Promise<SealedLiveQuery<RealtimeNotificationRow>>;
   onRows: (rows: AppNotification[]) => void;
   onState: (state: LiveQueryState) => void;
-  onClientReady: (client: RealtimeClient) => void;
 }) {
-  const [client, setClient] = useState<RealtimeClient | null>(null);
+  const client = useMemo(() => getRealtimeClient(realtimeUrl), [realtimeUrl]);
 
-  useEffect(() => {
-    let isCancelled = false;
-    const c = createRealtimeClient({
-      url: realtimeUrl,
-      logLevel: "debug",
-      logger: (entry) => {
-        const prefix = `[Neon Realtime WebSocket ${entry.level.toUpperCase()}]`;
-        if (entry.level === "error") {
-          console.error(`${prefix} ${entry.event}: ${entry.message}`, entry);
-        } else if (entry.level === "warn") {
-          console.warn(`${prefix} ${entry.event}: ${entry.message}`, entry);
-        } else {
-          console.log(`${prefix} ${entry.event}: ${entry.message}`, entry);
-        }
-      },
-    });
-
-    if (!isCancelled) {
-      setClient(c);
-      onClientReady(c);
-    }
-
-    return () => {
-      isCancelled = true;
-      console.log("[Neon Realtime WebSocket] Closing connection on unmount.");
-      try {
-        c.close();
-      } catch (err) {
-        console.warn("[Neon Realtime WebSocket] Error closing client:", err);
-      }
-    };
-  }, [realtimeUrl, onClientReady]);
-
-  if (!client) {
-    return null;
-  }
+  const handleBoundaryError = useCallback(
+    (err: Error) => {
+      onState({ status: "error", error: err } as LiveQueryState);
+    },
+    [onState],
+  );
 
   return (
-    <RealtimeProvider client={client}>
-      <LiveNotificationSubscriber
-        key={`${sealedQuery.queryFingerprint}-${client ? "ready" : "none"}`}
-        sealedQuery={sealedQuery}
-        refreshQuery={refreshQuery}
-        onRows={onRows}
-        onState={onState}
-      />
-    </RealtimeProvider>
+    <RealtimeErrorBoundary onError={handleBoundaryError}>
+      <RealtimeProvider client={client}>
+        <LiveNotificationSubscriber
+          key={sealedQuery.queryFingerprint}
+          sealedQuery={sealedQuery}
+          refreshQuery={refreshQuery}
+          onRows={onRows}
+          onState={onState}
+        />
+      </RealtimeProvider>
+    </RealtimeErrorBoundary>
   );
 }
 
@@ -155,7 +150,6 @@ export function NotificationCenter() {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [sealError, setSealError] = useState<string | null>(null);
 
-  const clientRef = useRef<RealtimeClient | null>(null);
   const seenIdsRef = useRef<Set<string> | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -339,9 +333,6 @@ export function NotificationCenter() {
           refreshQuery={refreshQuery}
           onRows={handleLiveRows}
           onState={handleStateChange}
-          onClientReady={(c) => {
-            clientRef.current = c;
-          }}
         />
       )}
 
