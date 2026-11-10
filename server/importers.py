@@ -7,10 +7,12 @@ parse untrusted binary formats and the output is always sanitised.
 
 from __future__ import annotations
 
+import base64
 import html
 import io
 import os
 import re
+import uuid
 import zipfile
 from dataclasses import dataclass
 
@@ -20,6 +22,7 @@ import markdown as md
 from .config import MAX_UPLOAD_BYTES, SUPPORTED_UPLOAD_EXTENSIONS
 from .errors import bad_request
 from .sanitize import sanitize_html
+from .storage import is_cloudinary_configured, upload_image_buffer
 
 
 @dataclass
@@ -56,13 +59,30 @@ def _md_to_html(text: str) -> str:
     return md.markdown(text, extensions=["sane_lists"])
 
 
-def _docx_to_html(raw: bytes) -> str:
+def _docx_to_html(raw: bytes, doc_id: str | None = None) -> str:
     if not zipfile.is_zipfile(io.BytesIO(raw)):
         raise bad_request("This .docx file appears to be corrupted.", code="unreadable_file")
+
+    def _convert_image(image):
+        with image.open() as image_bytes:
+            encoded_bytes = image_bytes.read()
+            content_type = image.content_type or "image/png"
+
+            # If Cloudinary is configured and doc_id provided, upload it!
+            if doc_id and is_cloudinary_configured():
+                img_name = f"img_{uuid.uuid4().hex[:8]}"
+                res = upload_image_buffer(encoded_bytes, content_type, doc_id, img_name)
+                if res and "secure_url" in res:
+                    return {"src": res["secure_url"]}
+
+            # Fallback: Base64 data URI so images never disappear
+            b64 = base64.b64encode(encoded_bytes).decode("ascii")
+            return {"src": f"data:{content_type};base64,{b64}"}
+
     try:
-        # Images are dropped: the editor doesn't support them in this scope.
         result = mammoth.convert_to_html(
-            io.BytesIO(raw), convert_image=mammoth.images.img_element(lambda _img: {})
+            io.BytesIO(raw),
+            convert_image=mammoth.images.img_element(_convert_image),
         )
     except Exception as exc:  # mammoth raises a variety of parsing errors
         raise bad_request(
@@ -72,7 +92,11 @@ def _docx_to_html(raw: bytes) -> str:
     return result.value
 
 
-def convert_upload(filename: str | None, raw: bytes) -> ConvertedFile:
+def convert_upload(
+    filename: str | None,
+    raw: bytes,
+    doc_id: str | None = None,
+) -> ConvertedFile:
     if not filename:
         raise bad_request("No file was provided.", code="missing_file")
     stem, ext = os.path.splitext(os.path.basename(filename))
@@ -88,7 +112,7 @@ def convert_upload(filename: str | None, raw: bytes) -> ConvertedFile:
         raise bad_request("The uploaded file is too large (max 4 MB).", code="file_too_large")
 
     if ext == ".docx":
-        body = _docx_to_html(raw)
+        body = _docx_to_html(raw, doc_id=doc_id)
     elif ext == ".txt":
         body = _txt_to_html(_decode_text(raw))
     else:

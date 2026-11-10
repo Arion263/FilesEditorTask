@@ -15,11 +15,12 @@ ALLOWED_TAGS = {
     "strong", "b", "em", "i", "u", "s",
     "ul", "ol", "li",
     "blockquote", "code", "pre",
-    "a",
+    "a", "img",
 }
 ALLOWED_ATTRIBUTES = {
     "a": {"href", "target"},
     "ol": {"start"},
+    "img": {"src", "alt", "title", "width", "height"},
 }
 
 
@@ -28,6 +29,6 @@ def sanitize_html(html: str) -> str:
         html,
         tags=ALLOWED_TAGS,
         attributes=ALLOWED_ATTRIBUTES,
-        url_schemes={"http", "https", "mailto"},
+        url_schemes={"http", "https", "mailto", "data"},
         link_rel="noopener noreferrer nofollow",
     ).strip()

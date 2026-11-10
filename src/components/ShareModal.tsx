@@ -126,7 +126,7 @@ export function ShareModal({ docId, owner, shares, onSharesChange, onClose }: Pr
             className="input min-w-0 flex-1"
           />
           <select
-            aria-label="Access role"
+            aria-label="Permission"
             value={role}
             onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
             className="input w-auto"
@@ -184,7 +184,7 @@ export function ShareModal({ docId, owner, shares, onSharesChange, onClose }: Pr
                 </div>
                 <div className="flex items-center gap-2">
                   <select
-                    aria-label={`Role for ${sh.user.email}`}
+                    aria-label={`Permission for ${sh.user.email}`}
                     value={sh.role}
                     disabled={busy}
                     onChange={(e) =>

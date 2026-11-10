@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify
 
-from . import auth, documents
+from . import auth, cron, documents
 from .config import Config
 from .db import init_db, make_engine
 from .errors import register_error_handlers
@@ -19,8 +19,8 @@ def create_app(config: Config | None = None) -> Flask:
         SECRET_KEY=config.secret_key,
         TESTING=config.testing,
         SEED_DEMO_USERS=config.seed_demo_users,
-        # Covers JSON saves (<=1M chars) and multipart uploads (<=2 MB file).
-        MAX_CONTENT_LENGTH=int(4.5 * 1024 * 1024),
+        # Covers JSON saves (<=2M chars) and multipart uploads (<=4 MB file).
+        MAX_CONTENT_LENGTH=int(6.0 * 1024 * 1024),
         SESSION_COOKIE_NAME="fe_session",
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -36,6 +36,7 @@ def create_app(config: Config | None = None) -> Flask:
     register_error_handlers(app)
     app.register_blueprint(auth.bp)
     app.register_blueprint(documents.bp)
+    app.register_blueprint(cron.bp)
 
     @app.get("/api/health")
     def health():

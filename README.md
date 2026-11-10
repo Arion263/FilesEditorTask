@@ -73,13 +73,13 @@ On the sign-in screen you can sign in with a single click using any of the seede
 - `bob@example.com` (`password123`)
 - `carol@example.com` (`password123`)
 
-> **Tip:** Open two browser windows (or one normal window as Alice and one private/incognito window as Bob) to test document sharing and role permissions end-to-end.
+> **Tip:** Open two browser windows (or one normal window as Alice and one private/incognito window as Bob) to test document sharing and permissions end-to-end.
 
 ---
 
 ## Running Automated Tests
 
-The test suite (`tests/test_api.py`) runs 15 end-to-end integration tests against the Flask WSGI app and an isolated SQLite database, covering authentication, rich-text persistence, XSS sanitization, optimistic concurrency (`409 version_conflict`), role-based sharing (`owner` / `editor` / `viewer`), and `.txt` / `.md` / `.docx` file uploads and validation:
+The test suite (`tests/test_api.py`) runs 15 end-to-end integration tests against the Flask WSGI app and an isolated SQLite database, covering authentication, rich-text persistence, XSS sanitization, optimistic concurrency (`409 version_conflict`), document access permissions (`owner` / `editor` / `viewer`), and `.txt` / `.md` / `.docx` file uploads and validation:
 
 ```bash
 # Windows

@@ -23,6 +23,7 @@ from .errors import ApiError, bad_request, forbidden, not_found
 from .http import get_engine, json_body, login_required, optional_str, public_user
 from .importers import convert_upload
 from .sanitize import sanitize_html
+from .storage import delete_document_assets
 
 bp = Blueprint("documents", __name__, url_prefix="/api")
 
@@ -121,9 +122,9 @@ def serialize_document(conn: Connection, row, role: str) -> dict[str, Any]:
     return payload
 
 
-def create_document(title: str, content: str) -> dict[str, Any]:
+def create_document(title: str, content: str, doc_id: str | None = None) -> dict[str, Any]:
     now = utcnow()
-    doc_id = new_id()
+    doc_id = doc_id or new_id()
     with get_engine().begin() as conn:
         conn.execute(
             insert(documents).values(
@@ -278,6 +279,9 @@ def delete_document(doc_id: str):
         # Explicit share cleanup keeps behaviour identical on SQLite and Postgres.
         conn.execute(delete(document_shares).where(document_shares.c.document_id == doc_id))
         conn.execute(delete(documents).where(documents.c.id == doc_id))
+
+    # Delete external storage assets asynchronously/idempotently with retries
+    delete_document_assets(doc_id)
     return "", 204
 
 
@@ -376,8 +380,9 @@ def revoke_share(doc_id: str, user_id: str):
 def import_document():
     """Upload a .txt/.md/.docx file and turn it into a new editable document."""
     filename, raw = uploaded_file()
-    converted = convert_upload(filename, raw)
-    return jsonify(document=create_document(converted.title, converted.html)), 201
+    doc_id = new_id()
+    converted = convert_upload(filename, raw, doc_id=doc_id)
+    return jsonify(document=create_document(converted.title, converted.html, doc_id=doc_id)), 201
 
 
 @bp.post("/convert")
@@ -385,5 +390,6 @@ def import_document():
 def convert_file():
     """Convert a file to sanitised HTML so the editor can insert it into a draft."""
     filename, raw = uploaded_file()
-    converted = convert_upload(filename, raw)
+    doc_id = request.args.get("doc_id")
+    converted = convert_upload(filename, raw, doc_id=doc_id)
     return jsonify(title=converted.title, html=converted.html)

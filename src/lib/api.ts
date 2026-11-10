@@ -148,6 +148,9 @@ export const api = {
       method: "POST",
       body: fileForm(file),
     }),
-  convertFile: (file: File) =>
-    request<{ title: string; html: string }>("/convert", { method: "POST", body: fileForm(file) }),
+  convertFile: (file: File, docId?: string) =>
+    request<{ title: string; html: string }>(
+      docId ? `/convert?doc_id=${encodeURIComponent(docId)}` : "/convert",
+      { method: "POST", body: fileForm(file) },
+    ),
 };

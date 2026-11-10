@@ -159,7 +159,7 @@ export default function DocumentPage() {
     }
     setBanner(null);
     try {
-      const { html } = await api.convertFile(file);
+      const { html } = await api.convertFile(file, doc?.id);
       editorRef.current.chain().focus().insertContent(html).run();
     } catch (err) {
       if (!handleSession(err)) setBanner(errorMessage(err));
@@ -203,6 +203,7 @@ export default function DocumentPage() {
         />
         <RoleBadge role={doc.role} />
         <SaveIndicator state={saveState} updatedAt={doc.updated_at} onSave={() => void saveNow()} />
+        <DownloadMenu doc={doc} getEditorContent={() => latestRef.current.content} />
         {doc.role === "owner" && (
           <button type="button" className="btn-primary" onClick={() => setShareOpen(true)}>
             Share{doc.shares?.length ? ` (${doc.shares.length})` : ""}
@@ -278,6 +279,109 @@ export default function DocumentPage() {
           onSharesChange={(shares) => setDoc((d) => (d ? { ...d, shares } : d))}
           onClose={() => setShareOpen(false)}
         />
+      )}
+    </div>
+  );
+}
+
+function DownloadMenu({
+  doc,
+  getEditorContent,
+}: {
+  doc: DocumentDetail;
+  getEditorContent: () => string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  function downloadHtml() {
+    const content = getEditorContent() || doc.content;
+    const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${doc.title}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #0f172a; }
+    img { max-width: 100%; height: auto; border-radius: 8px; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    blockquote { border-left: 3px solid #cbd5e1; margin: 0; padding-left: 1rem; color: #475569; }
+  </style>
+</head>
+<body>
+  <h1>${doc.title}</h1>
+  ${content}
+</body>
+</html>`;
+    const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title || "document"}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setOpen(false);
+  }
+
+  function downloadMarkdown() {
+    const content = getEditorContent() || doc.content;
+    // Basic conversion of HTML tags to Markdown
+    let md = content
+      .replace(/<h1>(.*?)<\/h1>/gi, "# $1\n\n")
+      .replace(/<h2>(.*?)<\/h2>/gi, "## $1\n\n")
+      .replace(/<h3>(.*?)<\/h3>/gi, "### $1\n\n")
+      .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
+      .replace(/<b>(.*?)<\/b>/gi, "**$1**")
+      .replace(/<em>(.*?)<\/em>/gi, "*$1*")
+      .replace(/<i>(.*?)<\/i>/gi, "*$1*")
+      .replace(/<u>(.*?)<\/u>/gi, "_$1_")
+      .replace(/<img[^>]*src="([^"]*)"[^>]*>/gi, "![]($1)\n\n")
+      .replace(/<p>(.*?)<\/p>/gi, "$1\n\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<li><p>(.*?)<\/p><\/li>/gi, "- $1\n")
+      .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
+      .replace(/<\/?(ul|ol)>/gi, "\n")
+      .replace(/<[^>]+>/g, "");
+
+    const blob = new Blob([`# ${doc.title}\n\n${md}`], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title || "document"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="btn-secondary text-xs"
+        onClick={() => setOpen(!open)}
+        title="Download document"
+      >
+        Download ▾
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-30"
+          onMouseLeave={() => setOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={downloadHtml}
+            className="flex w-full items-center px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+          >
+            HTML (.html con imágenes)
+          </button>
+          <button
+            type="button"
+            onClick={downloadMarkdown}
+            className="flex w-full items-center px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+          >
+            Markdown (.md)
+          </button>
+        </div>
       )}
     </div>
   );

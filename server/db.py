@@ -26,6 +26,7 @@ from sqlalchemy import (
     event,
     insert,
     select,
+    update,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -98,9 +99,9 @@ document_shares = Table(
 
 DEMO_PASSWORD = "password123"
 DEMO_USERS = (
-    ("alice@example.com", "Alice Owner"),
-    ("bob@example.com", "Bob Collaborator"),
-    ("carol@example.com", "Carol Viewer"),
+    ("alice@example.com", "Alice"),
+    ("bob@example.com", "Bob"),
+    ("carol@example.com", "Carol"),
 )
 
 
@@ -150,3 +151,6 @@ def _seed_demo_users(engine: Engine) -> None:
                     for email, name in missing
                 ],
             )
+        for email, name in DEMO_USERS:
+            if email in existing:
+                conn.execute(update(users).where(users.c.email == email).values(name=name))

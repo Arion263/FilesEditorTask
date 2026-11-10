@@ -3,6 +3,7 @@
 import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import { useEffect } from "react";
 
 interface Props {
@@ -25,6 +26,12 @@ export function RichTextEditor({ initialContent, editable, onChange, onReady, to
         link: { openOnClick: false, autolink: true },
       }),
       Placeholder.configure({ placeholder: "Start writing…" }),
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "rounded-lg max-w-full h-auto my-3 border border-slate-200 shadow-xs",
+        },
+      }),
     ],
     content: initialContent,
     editable,

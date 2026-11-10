@@ -51,6 +51,12 @@ class Config:
     seed_demo_users: bool = field(
         default_factory=lambda: os.environ.get("SEED_DEMO_USERS", "1") != "0"
     )
+    cloudinary_url: str = field(
+        default_factory=lambda: os.environ.get("CLOUDINARY_URL", "")
+    )
+    cron_secret: str = field(
+        default_factory=lambda: os.environ.get("CRON_SECRET", "")
+    )
     testing: bool = False
 
     @property
